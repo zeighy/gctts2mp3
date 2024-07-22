@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-to-Speech Converter</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #error, #audioPreview, #downloadLink {
+            display: none;
+        }
+        #error {
+            color: red;
+        }
+        textarea, select {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .notice {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        #charCount {
+            float: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .help-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Text-to-Speech Converter</h1>
+    <div class="notice">
+        <strong>Notice:</strong> All text inputs are logged for system improvement and troubleshooting purposes. By using this service, you consent to the logging of your input text.
+    </div>
+    <div class="notice">
+        <strong>Character Limit:</strong> The maximum allowed text length is 2000 characters.
+    </div>
+    <div id="error"></div>
+    <form id="ttsForm">
+        <label for="text">Text to convert:</label>
+        <div id="charCount">0 / 2000</div>
+        <textarea id="text" name="text" rows="4" required maxlength="2000"></textarea>
+        <div class="help-text">
+            <strong>Tips for best results:</strong>
+            <ul>
+                <li>Group your text into smaller chunks (e.g., paragraphs or sentences) for easier management and more flexible use of the generated audio.</li>
+                <li>Avoid using special characters. The following characters will be stripped from your input: &lt; &gt; ' " { }</li>
+                <li>The ampersand (&) will be replaced with "and".</li>
+                <li>Avoid using contractions. For example, use "we will" instead of "we'll", and "I will" instead of "I'll". This ensures better pronunciation in the generated speech.</li>
+                <li>Use full words and proper punctuation for the best speech quality.</li>
+                <li>For acronyms and special words:
+                    <ul>
+                        <li>To have each letter read individually, add spaces between them. For example, write "K J A" instead of "KJA".</li>
+                        <li>For acronyms pronounced as words, consider spelling them phonetically. For example, write "eighties" instead of "ATIS".</li>
+                        <li>Test different spellings to find the best pronunciation for unique names or terms.</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
+        <label for="voice">Voice option:</label>
+        <select id="voice" name="voice" required>
+            <optgroup label="Canadian French">
+                <option value="fr-CA-Wavenet-C">Female: fr-CA-Wavenet-C</option>
+                <option value="fr-CA-Wavenet-D">Male: fr-CA-Wavenet-D</option>
+            </optgroup>
+            <optgroup label="English">
+                <option value="en-US-Wavenet-H">Female: en-US-Wavenet-H</option>
+                <option value="en-US-Studio-O">Female: en-US-Studio-O</option>
+                <option value="en-US-Journey-O">Female: en-US-Journey-O</option>
+                <option value="en-US-Standard-H">Female: en-US-Standard-H</option>
+                <option value="en-US-Studio-Q">Male: en-US-Studio-Q</option>
+                <option value="en-US-Journey-D">Male: en-US-Journey-D</option>
+                <option value="en-US-Wavenet-J">Male: en-US-Wavenet-J</option>
+                <option value="en-US-Neural2-D">Male: en-US-Neural2-D</option>
+            </optgroup>
+            <optgroup label="Spanish">
+                <option value="es-US-News-F">Female: es-US-News-F</option>
+                <option value="es-US-Wavenet-C">Male: es-US-Wavenet-C</option>
+            </optgroup>
+        </select><br>
+
+        <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITE_KEY"></div>
+
+        <button type="submit">Convert</button>
+    </form>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Converting text to speech...</p>
+    </div>
+
+    <div id="audioPreview">
+        <h2>Audio Preview</h2>
+        <audio id="audioPlayer" controls>
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+    <a id="downloadLink" href="#" download="speech.mp3">Download MP3</a>
+
+    <script>
+        const textArea = document.getElementById('text');
+        const charCount = document.getElementById('charCount');
+        const loading = document.getElementById('loading');
+        const form = document.getElementById('ttsForm');
+        const errorDiv = document.getElementById('error');
+        const audioPreview = document.getElementById('audioPreview');
+        const downloadLink = document.getElementById('downloadLink');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        textArea.addEventListener('input', function() {
+            const remaining = 2000 - this.value.length;
+            charCount.textContent = `${this.value.length} / 2000`;
+            
+            if (remaining < 0) {
+                charCount.style.color = 'red';
+            } else {
+                charCount.style.color = '#666';
+            }
+        });
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            loading.style.display = 'block';
+            errorDiv.style.display = 'none';
+            audioPreview.style.display = 'none';
+            downloadLink.style.display = 'none';
+            
+            const formData = new FormData(this);
+            
+            fetch('text_to_speech.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                if (data.error) {
+                    errorDiv.textContent = data.error;
+                    errorDiv.style.display = 'block';
+                } else {
+                    const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+                    audioPlayer.src = audioSrc;
+                    audioPreview.style.display = 'block';
+                    downloadLink.href = audioSrc;
+                    downloadLink.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                console.error('Error:', error);
+                errorDiv.textContent = 'An error occurred. Please try again.';
+                errorDiv.style.display = 'block';
+            });
+
+            // Reset the Turnstile widget after form submission
+            turnstile.reset();
+        });
+    </script>
+</body>
+</html>
